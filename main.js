@@ -1,5 +1,6 @@
 "use strict";
 
+var joy_map = {};
 var widgets = {};
 var global_wid_counter = 0;
 
@@ -109,7 +110,7 @@ function show_joysticks_dialog() {
     }
 
     function update_info() {
-        var joys = navigator.getGamepads();
+        var joys = get_joys();
         for (var i = 0; i < 4; ++i) {
             update_joy(joys[i], $t.id('joyinfo' + i));
         }
@@ -119,11 +120,33 @@ function show_joysticks_dialog() {
     requestAnimationFrame(update_info);
 }
 
+function get_joys() {
+    let joys = navigator.getGamepads();
+    let res = [null, null, null, null];
+
+    for (let joy of joys) {
+        if (!joy) continue;
+
+        let idx = joy_map[joy.id];
+        if (idx !== undefined) {
+            res[idx] = joy;
+        } else {
+            let firstEmptyIdx = res.findIndex(v => !v);
+            if (firstEmptyIdx != -1) {
+                res[firstEmptyIdx] = joy;
+                joy_map[joy.id] = firstEmptyIdx;
+            }
+        }
+    }
+
+    return res;
+}
+
 function show_widget_properties_dialog(widget) {
     if (dialog_active) return;
     dialog_active = true;
     var d = $t.gui.dialog_buttons("Edit widget " + widget.widtype, {
-        'Delete': function(d) { 
+        'Delete': function(d) {
             del_widget(widget);
             $t.gui.dialog_remove(d[0]); dialog_active = false;
         },
@@ -141,14 +164,14 @@ function show_widget_properties_dialog(widget) {
                 if (prs[0] == 'axis') {
                     widget.params['link'][prs[1]] =
                         [$t.gui.input_value(ii[c++]), $t.gui.input_value(ii[c++])];
-                    widget.params.diapason[prs[1]] = 
+                    widget.params.diapason[prs[1]] =
                         [$t.gui.input_value(ii[c++]), $t.gui.input_value(ii[c++]),
                         $t.gui.input_value(ii[c++]), $t.gui.input_value(ii[c++])];
                 }
                 if (prs[0] == 'axis_but') {
                     widget.params['link'][prs[1]] =
                         [$t.gui.input_value(ii[c++]), $t.gui.input_value(ii[c++])];
-                    widget.params.diapason[prs[1]] = 
+                    widget.params.diapason[prs[1]] =
                         [$t.gui.input_value(ii[c++]), $t.gui.input_value(ii[c++]),
                         $t.gui.input_value(ii[c++])];
                 }
@@ -157,7 +180,7 @@ function show_widget_properties_dialog(widget) {
                         [$t.gui.input_value(ii[c++]), $t.gui.input_value(ii[c++])];
                 }
                 if (prs[0] == 'button') {
-                    widget.params['but'] = 
+                    widget.params['but'] =
                         [$t.gui.input_value(ii[c++]), $t.gui.input_value(ii[c++]), $t.gui.input_value(ii[c++])];
                 }
             }
@@ -316,7 +339,7 @@ function show_save_dialog() {
             });
             $t.inner($t.gui.make_table_inputs({ '(area)Export string': seria }), d[1]);
             $t.element('hr', {}, d[1]);
-            $t.element('a', { href: String(window.location).split('?')[0] + '?c=' + 
+            $t.element('a', { href: String(window.location).split('?')[0] + '?c=' +
                     encodeURIComponent(serialize_url(widgets)) }, d[1], 'Direct link');
 
             var ii = d[1].getElementsByClassName('dialog-input');
@@ -594,7 +617,7 @@ var widget_factory = {
     },
     'Vertical Axis': function(container, params) {
         if (!params.diapason) params.diapason = { x: [-1.0, 1.0], y: [-1.0, 1.0] };
-        var borders = 
+        var borders =
             params.righthanded ?
             [global_border_pass, global_border_tab, global_border_tab, global_border_pass] :
             [global_border_tab, global_border_pass, global_border_pass, global_border_tab];
@@ -610,7 +633,7 @@ var widget_factory = {
     },
     'Dual Axis': function(container, params) {
         if (!params.diapason) params.diapason = { x: [-1.0, 1.0], y: [-1.0, 1.0] };
-        var borders = 
+        var borders =
             params.righthanded ?
             [global_border_tab, global_border_tab, global_border_pass, global_border_pass] :
             [global_border_tab, global_border_pass, global_border_pass, global_border_tab];
@@ -825,7 +848,7 @@ function deserialize_url(str, container) {
 }
 
 function serialize(widgets) {
-    var res = { widgets: [], settings: {} };
+    var res = { widgets: [], settings: {}, joy_map: joy_map };
     for (var i in widgets) {
         var w = widgets[i];
         var p = Object.assign({}, w.params);
@@ -875,12 +898,13 @@ function deserialize(str, container) {
             var w = res.widgets[i];
             add_widget(container, w.widtype, w.params, w.pos.x, w.pos.y);
         }
+        if (res.joy_map != undefined) joy_map = res.joy_map;
         $t.id('seria_name').innerHTML = 'preset: ' + saved_presets.last;
     } catch (e) {}
 }
 
 function auto_update() {
-    var joys = navigator.getGamepads();
+    var joys = get_joys();
 
     function get_axis_data(addr) {
         try { return joys[addr[0] - 1].axes[addr[1] - 1]; }
@@ -916,7 +940,7 @@ function joy_initialize(container, w, h) {
     if (!saved_presets) saved_presets = { series: {}, last: undefined };
     else saved_presets = JSON.parse(saved_presets);
 
-    var params = $t.get_url_params(); 
+    var params = $t.get_url_params();
     if (params.c) {
         saved_presets.last = undefined;
         var c = decodeURIComponent(params.c);
